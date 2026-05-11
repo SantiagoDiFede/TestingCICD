@@ -48,7 +48,7 @@ pipeline {
             steps {
                 echo '========== Running unit tests =========='
                 bat '''
-                    pytest test_app.py ^
+                    python -m pytest test_app.py ^
                         --cov=app ^
                         --cov-report=xml ^
                         --cov-report=html ^
@@ -65,8 +65,8 @@ pipeline {
             steps {
                 echo '========== Checking code coverage =========='
                 bat '''
-                    coverage report
-                    coverage html
+                    python -m coverage report
+                    python -m coverage html
                 '''
                 publishHTML([
                     reportDir: 'htmlcov',
@@ -83,7 +83,7 @@ pipeline {
                     try {
                         withSonarQubeEnv('SonarQube') {
                             bat '''
-                                sonar-scanner.bat ^
+                                python -m sonar-scanner ^
                                     -Dsonar.projectKey=%SONAR_PROJECT_KEY% ^
                                     -Dsonar.sources=. ^
                                     -Dsonar.exclusions=venv/**,tests/**,.git/** ^
