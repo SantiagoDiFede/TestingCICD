@@ -11,65 +11,64 @@ pipeline {
         PYTHON_VERSION = '3.9'
         SONAR_PROJECT_KEY = 'flask-api-backend'
         SONAR_HOST_URL = 'http://localhost:9000'
-        // Define the module path to keep the script DRY
         MODULE_DIR = 'BackendServicePython'
     }
     
     stages {
-        stage('Initialize and Run') {
+        stage('Execute Module Pipeline') {
             steps {
-                // This 'dir' block ensures everything inside it happens in the subfolder
-                dir("${env.MODULE_DIR}") {
-                    
-                    stage('Setup') {
-                        echo '========== Setting up environment =========='
-                        bat '''
-                            python --version
-                            python -m pip install --upgrade pip
-                            pip install -r requirements.txt
-                            pip install pytest pytest-cov pytest-json-report
-                        '''
-                    }
-                    
-                    stage('Lint') {
-                        echo '========== Running code quality checks =========='
-                        bat '''
-                            pip install flake8
-                            python -m flake8 app.py test_app.py --count --select=E9,F63,F7,F82 --show-source --statistics || exit 0
-                            python -m flake8 app.py test_app.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || exit 0
-                        '''
-                    }
-                    
-                    stage('Unit Tests') {
-                        echo '========== Running unit tests =========='
-                        bat '''
-                            python -m pytest test_app.py ^
-                                --cov=app ^
-                                --cov-report=xml ^
-                                --cov-report=html ^
-                                --cov-report=term ^
-                                --junitxml=test-results.xml ^
-                                --json-report ^
-                                --json-report-file=report.json ^
-                                -v
-                        '''
-                    }
-                    
-                    stage('Code Coverage') {
-                        echo '========== Checking code coverage =========='
-                        bat '''
-                            python -m coverage report
-                            python -m coverage html
-                        '''
-                        publishHTML([
-                            reportDir: 'htmlcov',
-                            reportFiles: 'index.html',
-                            reportName: 'Code Coverage Report'
-                        ])
-                    }
-                    
-                    stage('SonarQube Analysis') {
-                        script {
+                script {
+                    // Everything inside this script block stays in the subfolder
+                    dir("${env.MODULE_DIR}") {
+                        
+                        stage('Setup') {
+                            echo '========== Setting up environment =========='
+                            bat '''
+                                python --version
+                                python -m pip install --upgrade pip
+                                pip install -r requirements.txt
+                                pip install pytest pytest-cov pytest-json-report
+                            '''
+                        }
+                        
+                        stage('Lint') {
+                            echo '========== Running code quality checks =========='
+                            bat '''
+                                pip install flake8
+                                python -m flake8 app.py test_app.py --count --select=E9,F63,F7,F82 --show-source --statistics || exit 0
+                                python -m flake8 app.py test_app.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || exit 0
+                            '''
+                        }
+                        
+                        stage('Unit Tests') {
+                            echo '========== Running unit tests =========='
+                            bat '''
+                                python -m pytest test_app.py ^
+                                    --cov=app ^
+                                    --cov-report=xml ^
+                                    --cov-report=html ^
+                                    --cov-report=term ^
+                                    --junitxml=test-results.xml ^
+                                    --json-report ^
+                                    --json-report-file=report.json ^
+                                    -v
+                            '''
+                        }
+                        
+                        stage('Code Coverage') {
+                            echo '========== Checking code coverage =========='
+                            bat '''
+                                python -m coverage report
+                                python -m coverage html
+                            '''
+                            publishHTML([
+                                reportDir: 'htmlcov',
+                                reportFiles: 'index.html',
+                                reportName: 'Code Coverage Report'
+                            ])
+                        }
+                        
+                        stage('SonarQube Analysis') {
                             try {
                                 withSonarQubeEnv('SonarQube') {
                                     bat '''
@@ -91,22 +90,12 @@ pipeline {
                 }
             }
         }
-
-        stage('Build & Deploy') {
-            when { branch 'main' }
-            steps {
-                dir("${env.MODULE_DIR}") {
-                    echo '========== Building & Deploying =========='
-                    bat 'echo Packaging application inside %MODULE_DIR%...'
-                }
-            }
-        }
     }
     
     post {
         always {
             echo '========== Cleaning up =========='
-            // We reference the subfolder path here so Jenkins can find the files for the UI
+            // Reference paths relative to root for the Jenkins UI listeners
             junit testResults: "${env.MODULE_DIR}/test-results.xml", allowEmptyResults: true
             archiveArtifacts artifacts: "${env.MODULE_DIR}/htmlcov/**", allowEmptyArchive: true
             archiveArtifacts artifacts: "${env.MODULE_DIR}/coverage.xml", allowEmptyArchive: true
