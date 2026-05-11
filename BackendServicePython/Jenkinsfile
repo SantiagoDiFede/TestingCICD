@@ -1,0 +1,157 @@
+pipeline {
+    agent any
+    
+    options {
+        // Keep last 30 builds
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        // Timeout after 30 minutes
+        timeout(time: 30, unit: 'MINUTES')
+        // Add timestamps to logs
+        timestamps()
+    }
+    
+    environment {
+        PYTHON_VERSION = '3.9'
+        SONAR_PROJECT_KEY = 'flask-api-backend'
+        SONAR_HOST_URL = 'http://localhost:9000'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '========== Checking out code =========='
+                checkout scm
+            }
+        }
+        
+        stage('Setup') {
+            steps {
+                echo '========== Setting up environment =========='
+                sh '''
+                    python --version
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    pip install pytest pytest-cov pytest-json-report
+                '''
+            }
+        }
+        
+        stage('Lint') {
+            steps {
+                echo '========== Running code quality checks =========='
+                sh '''
+                    pip install flake8
+                    flake8 app.py test_app.py --count --select=E9,F63,F7,F82 --show-source --statistics || true
+                    flake8 app.py test_app.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+                '''
+            }
+        }
+        
+        stage('Unit Tests') {
+            steps {
+                echo '========== Running unit tests =========='
+                sh '''
+                    pytest test_app.py \
+                        --cov=app \
+                        --cov-report=xml \
+                        --cov-report=html \
+                        --cov-report=term \
+                        --junitxml=test-results.xml \
+                        --json-report \
+                        --json-report-file=report.json \
+                        -v
+                '''
+            }
+        }
+        
+        stage('Code Coverage') {
+            steps {
+                echo '========== Checking code coverage =========='
+                sh '''
+                    coverage report
+                    coverage html
+                '''
+                publishHTML([
+                    reportDir: 'htmlcov',
+                    reportFiles: 'index.html',
+                    reportName: 'Code Coverage Report'
+                ])
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                echo '========== Running SonarQube analysis =========='
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        sonar-scanner \
+                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                            -Dsonar.sources=. \
+                            -Dsonar.exclusions=venv/**,tests/**,.git/** \
+                            -Dsonar.python.coverage.reportPaths=coverage.xml \
+                            -Dsonar.test.inclusions=test_*.py \
+                            -Dsonar.tests=. \
+                            -Dsonar.host.url=${SONAR_HOST_URL}
+                    '''
+                }
+            }
+        }
+        
+        stage('Quality Gate') {
+            steps {
+                echo '========== Checking SonarQube quality gate =========='
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                echo '========== Building application =========='
+                sh '''
+                    echo "Build stage - packaging application"
+                    # Optional: create a wheel or package
+                '''
+            }
+        }
+        
+        stage('Deploy to Dev') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '========== Deploying to Dev environment =========='
+                sh '''
+                    echo "Deployment script would go here"
+                    # Example: deploy to development server
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo '========== Cleaning up =========='
+            // Publish test results
+            junit 'test-results.xml'
+            
+            // Archive coverage reports
+            archiveArtifacts artifacts: 'htmlcov/**', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage.xml', allowEmptyArchive: true
+            
+            // Clean workspace
+            cleanWs()
+        }
+        
+        success {
+            echo '========== Build SUCCESS =========='
+            // Optional: send success notification
+        }
+        
+        failure {
+            echo '========== Build FAILED =========='
+            // Optional: send failure notification
+        }
+    }
+}
